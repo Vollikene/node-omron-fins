@@ -1,12 +1,16 @@
 {
   "name": "omron-fins",
   "description": "Node.js implementation of the Omron FINS protocol",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "main": "lib/index.js",
   "author": {
+    "name": "Steve-Mcl",
+    "email": "44235289+Steve-Mcl@users.noreply.github.com"
+  },
+  "contributors": [{
     "name": "Patrick Servello",
     "email": "patrick.servello@gmail.com"
-  },
+  }],
   "keywords": [
     "OMRON",
     "FINS",
@@ -16,8 +20,5 @@
   ],
   "dependencies": {},
   "readme": "node-omron-fins\n===============\n\nAn implementation of the Omron FINS library for node js\n",
-  "readmeFilename": "README.md",
-  "_id": "omron-fins@0.0.1",
-  "_shasum": "7eed15526534a65f5e799dfa4e7c0e0a2dd6acb7",
-  "_from": "/home/patrick/Documents/code/github/node-omron-fins"
+  "readmeFilename": "README.md"
 }
