@@ -70,11 +70,12 @@ Finally, call any of the supported commands!
 
 
 
-##### .read(address, regsToRead, callback)
+##### .read(address, regsToRead, callback, tag)
 Memory Area Read Command 
 * `address` - Memory area and the numerical start address
 * `regsToRead` - Number of registers to read
 * `callback` - Optional callback method 
+* `tag` - Optional tag item to send in callback method 
 
 ```js
  /* Reads 10 registers starting from register 00000 in the DM Memory Area */
@@ -86,17 +87,25 @@ client.read('D00000',10,function(err,bytes) {
 });
 ```
 
-##### .write(address, dataToBeWritten, callback)
+##### .write(address, dataToBeWritten, callback, tag)
 Memory Area Write Command
 * `address` - Memory area and the numerical start address
 * `dataToBeWritten` - An array of values or single value
 * `callback` - Optional callback method 
+* `tag` - Optional tag item to send in callback method 
+
 ```js
 /* Writes single value of 1337 into DM register 00000 */
 .write('D00000',1337)
 
 /* Writes the values 12,34,56 into DM registers 00000 00001 000002 */
 .write('D00000',[12,34,56]);
+
+/* Writes the values 12,34,56 into DM registers 00000 00001 000002 and callsback when done */
+.write('D00000',[12,34,56], function(seq){
+	//check seq.timeout and seq.error
+	console.log(seq.response)
+});
 
 
 /* Same as above with callback */
@@ -105,12 +114,13 @@ Memory Area Write Command
 });
 ```
 
-##### .fill(address, dataToBeWritten, regsToBeWritten, callback)
+##### .fill(address, dataToBeWritten, regsToBeWritten, callback, tag)
 Memory Area Fill Command
 * `address` - Memory area and the numerical start address
 * `dataToBeWritten` - Two bytes of data to be filled
 * `regsToBeWritten` - Number of registers to write
 * `callback` - Optional callback method
+* `tag` - Optional tag item to send in callback method 
 ```js
 
 /* Writes 1337 in 10 consecutive DM registers from 00100 to 00110 */
@@ -126,9 +136,10 @@ Memory Area Fill Command
 ```
 
 
-##### .run(callback)
+##### .run(callback, tag)
 RUN
 * `callback` Optional callback
+* `tag` - Optional tag item to send in callback method 
 ```js
 /* Puts into Monitor mode */
 .run(function(err,bytes) {
@@ -138,9 +149,10 @@ RUN
 
 ```
 
-##### .stop(callback)
+##### .stop(callback, tag)
 STOP
 * `callback` Optional callback
+* `tag` - Optional tag item to send in callback method 
 
 ```js
 
@@ -162,75 +174,107 @@ Bare bones example that will show you how to read data from a single client.
 
 ```js
 var fins = require('omron-fins');
+var fins = require('.');
 
 // Connecting to remote FINS client on port 9600 with default timeout value.
-var client = fins.FinsClient(9600,'127.0.0.1');
+// PLC is expected to be at 192.168.0.2 and this PC is expected to be node 1
+var client = fins.FinsClient(9600,'192.168.0.2', {SA1:1});
 
 // Setting up our error listener
 client.on('error',function(error) {
   console.log("Error: ", error);
 });
 
-// Setting up the response listener
-// Showing properties of a response
-client.on('reply',function(msg) {
-  	console.log("Reply from: ", msg.remotehost);
-  	console.log("Transaction SID: ", msg.sid)
-	console.log("Replying to issued command of: ", msg.command);
-	console.log("Response code of: ", msg.code);
-	console.log("Data returned: ", msg.values);
+// Setting up the genral response listener
+// Showing a selection of properties of a sequence response
+client.on('reply',function(seq) {
+	console.log("Reply from: ", seq.remotehost);
+	console.log("Sequence ID (SID): ", seq.sid);
+	console.log("Operation requested: ", seq.request.functionName);
+	console.log("Response code: ", seq.response.endCode);
+	console.log("Response desc: ", seq.response.endCodeDescription);
+	console.log("Data returned: ", seq.response.values);
+	console.log("Round trip time: ", seq.stats.runtimeMS);
+	console.log("Your tag: ", seq.tag);
 });
 
+client.on('reply',function(sequence) {
+	console.log(sequence)
+});
 
-//Read 10 registers starting at DM register 00000
-client.read('D00000',10);
+// Read 10 registers starting at DM register 0
+// a "reply" will be emitted - check general client reply on reply handler
+client.read('D0',10); 
 
+// Read 10 registers starting at DM register 10 & callback with my tagged item upon reply from PLC
+// direct callback is usefull for getting direct responses to direct requests
+var cb = function(seq) {
+	console.log("############# DIRECT CALLBACK #################")
+	console.warn(seq);
+	console.log("###############################################")
+};
+client.read('D10',10, cb, new Date());
+
+client.close();
 
 ```
 
 
 ### Multiple Clients  
-Example of instantiating multiple objects to allow for asynchronous communications. Because this code doesn't wait for a response from any client before sending/receiving packets it is incredibly fast. In this example we attempt to read a memory area from a list of remote hosts. Each command will either return with a response or timeout. Every transaction will be recorded to the `responses` array with the `ip` as a key and the `msg.values` as the associated value. If a timeout occurs the value for that transaction will be set to null. Once the size of the responses array is equal to the number of units we tried to communicate with we know we have gotten a response or timeout from every unit
+
+**TODO: Test and update this demo following v0.2.0 breaking changes**
+
+Example of instantiating multiple objects to allow for asynchronous communications. Because this code doesn't wait for a response from any client before sending/receiving packets it is incredibly fast. In this example we attempt to read a memory area from a list of remote hosts. Each command will either return with a response or timeout. Every transaction will be recorded to the `responses` array with the `ip` as a key and the `seq.response.values` as the associated value. 
+
+If a timeout occurs and you have provided a callback, the `seq.timeout` flag will be set.
+If a timeout occurs and you have not provided a callback, to can get a response by listening for `'timeout'` being emitted.
+Once the size of the responses array is equal to the number of units we tried to communicate with we know we have gotten a response or timeout from every unit
 
 
 ```js
+/* ***************** UNTESTED ***************** */
+
 var fins = require('omron-fins');
 var debug = true;
 var clients = [];
-var responses = [];
+var responses = {};
 
 /* List of remote hosts can be generated from local or remote resource */
-var remoteHosts = ['127.0.0.1','127.0.0.2','127.0.0.3'];
+var remoteHosts = [
+	{ KEY: "PLC1", IP:'192.168.0.1', OPTS: {DA1:1, SA1:99}),
+	{ KEY: "PLC2", IP:'192.168.0.2', OPTS: {DA1:2, SA1:99}),
+	{ KEY: "PLC3", IP:'192.168.0.3', OPTS: {DA1:3, SA1:99}),
+];
 
-/ * Data is ready to be processed (sent to API,DB,etc) */
+/* Data is ready to be processed (sent to API,DB,etc) */
 var finished = function(responses) {
 	console.log("All responses and or timeouts received");
 	console.log(responses);
-
 };
 
 var pollUnits = function() {
 
-    /* We use number of hosts to compare to the length of the response array */
+	/* We use number of hosts to compare to the length of the response array */
 	var numberOfRemoteHosts = remoteHosts.length;
-    var options = {timeout:10000};
-	for (var i in remoteHosts) {
+	var options = {timeout:2000};
+	for (var remHost in remoteHosts) {
 
-	        / * Add key value entry into responses array */
-		clients[i] = fins.FinsClient(9600,remoteHosts[i],options);
-		clients[i].on('reply',function(msg) {
+		/* Add key value entry into responses array */
+		clients[remHost.KEY] = fins.FinsClient(9600,remHost.IP,remHost.OPTS);
+		clients[remHost.KEY].on('reply',function(seq) {
+			console.log("Got reply from: ", seq.response.remotehost);
+
 			/* Add key value pair of [ipAddress] = values from read */
-			responses[msg.remotehost] = msg.values;
+			responses[seq.response.remotehost] = seq.response.values;
+			
 			/* Check to see size of response array is equal to number of hosts */
 			if(Object.keys(responses).length == numberOfRemoteHosts){
 				finished(responses);
 			}
-			if(debug)
-				console.log("Got reply from: ", msg.remotehost);
 		});
 
 		/* If timeout occurs log response for that IP as null */
-		clients[i].on('timeout',function(host) {
+		clients[remHost.KEY].on('timeout',function(host, seq) {
 			responses[host] = null;
 			if(Object.keys(responses).length == numberOfRemoteHosts){
 				finished(responses);
@@ -239,12 +283,13 @@ var pollUnits = function() {
 				console.log("Got timeout from: ", host);
 		});
 
-		clients[i].on('error',function(error) {
+		clients[remHost.KEY].on('error',function(error, seq) {
+			//depending where the error occured, seq may contain relevant info
 			console.log("Error: ", error)
 		});
 
 		/* Read 10 registers starting at DM location 00000 */
-		clients[i].read('D00000',10);
+		clients[remHost.KEY].read('D00000',10);
 
 	};
 };
