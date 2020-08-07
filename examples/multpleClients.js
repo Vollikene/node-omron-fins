@@ -1,80 +1,60 @@
-ar fins = require('../lib/index');
+/* ***************** UNTESTED ***************** */
 
+var fins = require('omron-fins');
 var debug = true;
-
-/* Hold our FinsClient objects */
 var clients = [];
+var responses = {};
 
-/* Hold both successful and failed communication attempts */
-var responses = [];
+/* List of remote hosts can be generated from local or remote resource */
+var remoteHosts = [
+	{ KEY: "PLC1", IP:'192.168.0.1', OPTS: {DA1:1, SA1:99} },
+	{ KEY: "PLC2", IP:'192.168.0.2', OPTS: {DA1:2, SA1:99} },
+	{ KEY: "PLC3", IP:'192.168.0.3', OPTS: {DA1:3, SA1:99} },
+];
 
-/* 
-    List of remote hosts
-    More than likely will be generated from external source
-*/
-
-var remoteHosts = ['127.0.0.1','127.0.0.2','127.0.0.3'];
-
-
-/*
-    This method will be executed once we know all communications 
-    have either timed out or responded accordingly. This is where
-    data will be processed (database,api,etc)
-
-*/
-
+/* Data is ready to be processed (sent to API,DB,etc) */
 var finished = function(responses) {
-    console.log("All responses and or timeouts received");
-    console.log(responses);
-
+	console.log("All responses and or timeouts received");
+	console.log(responses);
 };
 
 var pollUnits = function() {
 
-    /* We use number of hosts to compare to the length of the response array */
-    var numberOfRemoteHosts = remoteHosts.length;
-    var options = {timeout:10000};
-    for (var i in remoteHosts) {
+	/* We use number of hosts to compare to the length of the response array */
+	var numberOfRemoteHosts = remoteHosts.length;
+	var options = {timeout:2000};
+	for (var remHost in remoteHosts) {
 
-        /*
-            Add each client to the FinsClient object array
-            Each FinsClient object using default timeout and currently iterated IP
-        */
-        clients[i] = fins.FinsClient(9600,remoteHosts[i],options);
+		/* Add key value entry into responses array */
+		clients[remHost.KEY] = fins.FinsClient(9600,remHost.IP,remHost.OPTS);
+		clients[remHost.KEY].on('reply', function(seq) {
+			if(debug) console.log("Got reply from: ", seq.response.remotehost);
 
-        clients[i].on('reply',function(msg) {
-            /* Add key value pair of [ipAddress] = values from read */
-            responses[msg.remotehost] = msg.values;
-            /* Check to see size of response array is equal to number of hosts */
-            if(Object.keys(responses).length == numberOfRemoteHosts){
-                finished(responses);
-            }
-            if(debug)
-                console.log("Got reply from: ", msg.remotehost);
-        });
+			/* Add key value pair of [ipAddress] = values from read */
+			responses[seq.response.remotehost] = seq.response.values;
+			
+			/* Check to see size of response array is equal to number of hosts */
+			if(Object.keys(responses).length == numberOfRemoteHosts){
+				finished(responses);
+			}
+		});
 
-        /* If timeout occurs log response for that IP as null */
-        clients[i].on('timeout',function(host) {
-            responses[host] = null;
-            if(Object.keys(responses).length == numberOfRemoteHosts){
-                finished(responses);
-            };
-            if(debug)
-                console.log("Got timeout from: ", host);
-        });
+		/* If timeout occurs log response for that IP as null */
+		clients[remHost.KEY].on('timeout',function(host, seq) {
+			responses[host] = null;
+			if(Object.keys(responses).length == numberOfRemoteHosts){
+				finished(responses);
+			};
+			if(debug) console.log("Got timeout from: ", host);
+		});
 
-        clients[i].on('error',function(error) {
-            console.log("Error: ", error)
+		clients[remHost.KEY].on('error',function(error, seq) {
+			//depending where the error occured, seq may contain relevant info
+			console.error(error)
+		});
 
-        });
+		/* Read 10 registers starting at DM location 00000 */
+		clients[remHost.KEY].read('D00000',10);
 
-        /* Read 10 registers starting at DM location 00000 */
-        clients[i].read('D00000',10);
-
-    };
+	};
 };
-
-
-
-console.log("Starting.....");
-pollUnits();
