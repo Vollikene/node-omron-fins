@@ -14,6 +14,7 @@ Semantic Versioning 2.0.0 will be followed after V1 however for now, where you s
 
 
 ## Supported PLCs:
+* CP
 * CV
 * CS
 * CJ
