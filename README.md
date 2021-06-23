@@ -27,6 +27,8 @@ NOTE: Not all NX PLCs have FINS support.
 * Memory area read (Word and Bit)
 * Memory area write (Word and Bit)
 * Memory area fill
+* Multiple Memory area read
+* Memory area transfer
 * Controller status read
 * Run
 * Stop
@@ -149,7 +151,7 @@ client.read('D00000',10,function(err,bytes) {
 ```
 
 ### Memory Area Fill Command
-`.fill(address, value, regsToBeWritten, callback, tag)`
+`.fill(address, value, count, callback, tag)`
 
 * `address` - Memory area and the numerical start address e.g. `D100` or `CIO50`
 * `value` - Value to be filled
@@ -169,8 +171,45 @@ client.read('D00000',10,function(err,bytes) {
 
 /* Writes 1111 in 4 consecutive CIO bit registers from CIO5.0 to CIO5.3 */
 .fill('CIO5.0',true,4);
+```
+
+### Multiple Memory Area Read Command
+`.readMultiple(addresses, callback, tag)`
+
+* `addresses` - Array or CSV of Memory addresses e.g. `"D10.15,CIO100,E0_100"` or `["CIO50.0", "D30", "W0.0"]`
+* `callback` - Optional callback `(err, msg) => {}` 
+* `tag` - Optional tag item that is sent back in the callback method 
+
+```js
+
+/* Reads D10.15, CIO100, E0_100 in one transmission*/
+.readMultiple("D10.15,CIO100,E0_100");
+
+/* Reads CIO50.0, D30, W0.0 in one transmission*/
+.readMultiple(["CIO50.0","D30", "W0.0"],1337,10,function(err, msg) {
+	console.log("msg: ", msg); 
+});
+```
 
 
+### MEMORY AREA TRANSFER Command
+`.transfer(srcAddress, dstAddress, count, callback, tag)`
+
+* `srcAddress` - Source Memory address e.g. `D100` or `CIO50`
+* `dstAddress` - Destination Memory address e.g. `D200` or `CI100`
+* `count` - Number of registers to copy
+* `callback` - Optional callback `(err, msg) => {}` 
+* `tag` - Optional tag item that is sent back in the callback method 
+
+```js
+
+/* Copies 10 values from D10 to CIO20*/
+.transfer("D10", "CIO20", 10);
+
+/* Copies values from D10 to CIO20 and calls callback with result*/
+.transfer("D10", "CIO20", 10, function(err, msg) {
+	console.log("msg: ", msg); 
+});
 ```
 
 
@@ -225,7 +264,7 @@ client.read('D00000',10,function(err,bytes) {
 A basic example that will show you how to read, write and fill data for a single client.
 
 ```js
-const fins = require('./lib/index');  // << use this when running from src
+const fins = require('../lib/index');  // << use this when running from src
 //const fins = require('omron-fins'); // << use this when running from npm
 
 // Connecting to remote FINS client on port 9600 with timeout of 2s.
@@ -263,6 +302,18 @@ console.log("Read 32 bits from D0.0")
 client.read('D0.0',32, null, {"tagdata":"I asked for 32 bits from D0.0"}); 
 
 
+
+// Read multiple registers using CSV as the address list 
+// a "reply" will be emitted - check general client reply on reply handler
+console.log(`Read multiple addresses "D0,D0.0,D0.1,D0.2,D0.3,W10,D1.15"`)
+client.readMultiple('D0,D0.0,D0.1,D0.2,D0.3,W10,D1.15', null, "readMultiple 'D0,D0.0,D0.1,D0.2,D0.3,W10,D1.15'"); 
+
+// Read multiple registers using an array as the address list 
+// a "reply" will be emitted - check general client reply on reply handler
+console.log(`Read multiple addresses ["D0","D0.0","D0.1","D0.2","W10","D1.15"]`)
+client.readMultiple(["D0","D0.0","D0.1","D0.2","W10","D1.15"], null, 'readMultiple ["D0","D0.0","D0.1","D0.2","W10","D1.15"]'); 
+
+
 // direct callback is useful for getting direct responses to direct requests
 var cb = function(err, msg) {
   console.log("################ DIRECT CALLBACK ####################")
@@ -274,14 +325,28 @@ var cb = function(err, msg) {
 };
 
 
-//example fill D700~D704 with 123 & the callback `cb` for the response
-console.log("Fill D700~D709 with 123 - direct callback expected")
-client.fill('D700',123, 10, cb, "set D700~D709 to 123");
+//example fill D700~D704 with randomInt. Callback `cb` with the response
+let randomInt = parseInt(Math.random() * 1000) + 1;
+console.log(`Fill D700~D709 with random number '${randomInt}' - direct callback expected`)
+client.fill('D700',randomInt, 10, cb, `set D700~D709 to '${randomInt}'`);
 
-//example Read D700~D709 with the callback `cb` for the response
-console.log("Read D700~D709 - direct callback expected")
-client.read('D700',10, cb, "D700~D709")
+//example Transfer D700~D709 to D710~D719. Callback `cb` with the response
+console.log("Transfer D700~D709 to D710~D719 - direct callback expected");
+client.transfer('D700','D710', 10, cb, "Transfer D700~D709 to D710~D719");
 
+//example Read D700~D719 
+console.log(`Read D700~D719 - expect ${randomInt}`)
+client.read('D700',20, null, `Read D700~D719 - expect all values to be '${randomInt}'`)
+
+//example Read from other PLC on FINS network (routed to NET:2, NODE:11) D700~D719 
+console.log(`Read D700~D719 from DNA:2, DA1:11`)
+client.read('D700',20, {timeoutMS:4000, DNA:2, DA1:11, callback: function(err,msg) {
+    if(err) {
+      console.error(err, msg, "Read D700~D719 from DNA: 2, DA1:11")
+    } else {
+      console.log(msg,"Read D700~D719 from DNA: 2, DA1:11");
+    }
+  }}, `Read D700~D719 from DNA:2, DA1:11`)
 
 //example write 1010 1111 0000 0101 to D700.0~D700.15 - response will be sent to client 'reply' handler
 client.write('D700.0', [true, false, 1, 0,    "true", true, 1, "1",    "false", false, 0, "0",    0, 1, 0,  1], null, "write 1010 1111 0000 0101 to D700");

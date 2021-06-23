@@ -1,60 +1,136 @@
-var fins = require('../lib/index');
-//var fins = require('omron-fins');
+const fins = require('../lib/index');  // << use this when running from src
+//const fins = require('omron-fins'); // << use this when running from npm
 
-// Connecting to remote FINS client on port 9600 with default timeout value.
-// PLC is expected to be at 192.168.0.2 and this PC is expected to be fins node 1
-var client = fins.FinsClient(9600,'192.168.0.2', {SA1:1, DA1:1});
+// Connecting to remote FINS client on port 9600 with timeout of 2s.
+// PLC is expected to be at 192.168.1.120 and this PC is expected to be fins node 36 (adjust as required)
+const client = fins.FinsClient(9600,'192.168.1.120', {SA1:36, DA1:120, timeout: 2000});
 
 // Setting up our error listener
-client.on('error',function(error, seq) {
-  console.log("Error: ", error, seq);
+client.on('error',function(error, msg) {
+  console.log("Error: ", error, msg);
 });
 // Setting up our timeout listener
-client.on('timeout',function(host, seq) {
+client.on('timeout',function(host, msg) {
   console.log("Timeout: ", host);
 });
 
-// Setting up the genral response listener
-// Showing a selection of properties of a sequence response
-client.on('reply',function(seq) {
-	console.log("Reply from           : ", seq.response.remoteHost);
-	console.log("Sequence ID (SID)    : ", seq.sid);
-	console.log("Operation requested  : ", seq.request.functionName);
-	console.log("Response code        : ", seq.response.endCode);
-	console.log("Response desc        : ", seq.response.endCodeDescription);
-	console.log("Data returned        : ", seq.response.values || "");
-	console.log("Round trip time      : ", seq.timeTaken + "ms");
-	console.log("Your tag: ", seq.tag);
+// Setting up the general response listener showing a selection of properties from the `msg`
+client.on('reply',function(msg) {
+  console.log("############# client.on('reply'...) #################")
+	console.log("Reply from           : ", msg.response.remoteHost);
+	console.log("Sequence ID (SID)    : ", msg.sid);
+	console.log("Operation requested  : ", msg.request.functionName);
+	console.log("Response code        : ", msg.response.endCode);
+	console.log("Response desc        : ", msg.response.endCodeDescription);
+	console.log("Data returned        : ", msg.response.values || "");
+	console.log("Round trip time      : ", msg.timeTaken + "ms");
+	console.log("Your tag             : ", msg.tag);
+  console.log("#####################################################")
 });
 
 // Read 10 registers starting at DM register 0
 // a "reply" will be emitted - check general client reply on reply handler
-client.read('D0',10); 
+console.log("Read 10 WD from D0")
+client.read('D0',10, null, {"tagdata":"I asked for 10 registers from D0"});
+console.log("Read 32 bits from D0.0")
+client.read('D0.0',32, null, {"tagdata":"I asked for 32 bits from D0.0"}); 
 
-// Read 10 registers starting at DM register D700 & callback with my tagged item upon reply from PLC
-// direct callback is usefull for getting direct responses to direct requests
-var cb = function(err, seq) {
-  console.log("############# DIRECT CALLBACK #################")
+
+
+// Read multiple registers using CSV as the address list 
+// a "reply" will be emitted - check general client reply on reply handler
+console.log(`Read multiple addresses "D0,D0.0,D0.1,D0.2,D0.3,W10,D1.15"`)
+client.readMultiple('D0,D0.0,D0.1,D0.2,D0.3,W10,D1.15', null, "readMultiple 'D0,D0.0,D0.1,D0.2,D0.3,W10,D1.15'"); 
+
+// Read multiple registers using an array as the address list 
+// a "reply" will be emitted - check general client reply on reply handler
+console.log(`Read multiple addresses ["D0","D0.0","D0.1","D0.2","W10","D1.15"]`)
+client.readMultiple(["D0","D0.0","D0.1","D0.2","W10","D1.15"], null, 'readMultiple ["D0","D0.0","D0.1","D0.2","W10","D1.15"]'); 
+
+
+// direct callback is useful for getting direct responses to direct requests
+var cb = function(err, msg) {
+  console.log("################ DIRECT CALLBACK ####################")
   if(err)
     console.error(err);
   else
-	  console.log(seq.request.functionName, seq.response.values);
-	console.log("###############################################")
+	  console.log(msg.request.functionName, msg.tag || "", msg.response.endCodeDescription);
+	console.log("#####################################################")
 };
-client.read('D700',10, cb, new Date());
 
-//example fill D700~D704 with 123
-client.fill('D700',123, 5);
+
+//example fill D700~D704 with randomInt. Callback `cb` with the response
+let randomInt = parseInt(Math.random() * 1000) + 1;
+console.log(`Fill D700~D709 with random number '${randomInt}' - direct callback expected`)
+client.fill('D700',randomInt, 10, cb, `set D700~D709 to '${randomInt}'`);
+
+//example Transfer D700~D709 to D710~D719. Callback `cb` with the response
+console.log("Transfer D700~D709 to D710~D719 - direct callback expected");
+client.transfer('D700','D710', 10, cb, "Transfer D700~D709 to D710~D719");
+
+//example Read D700~D719 
+console.log(`Read D700~D719 - expect ${randomInt}`)
+client.read('D700',20, null, `Read D700~D719 - expect all values to be '${randomInt}'`)
+
+//example Read from other PLC on FINS network (routed to NET:2, NODE:11) D700~D719 
+console.log(`Read D700~D719 from DNA:2, DA1:11`)
+client.read('D700',20, {timeoutMS:200, DNA:2, DA1:11, callback: function(err,msg) {
+    if(err) {
+      console.error(err, msg, "Read D700~D719 from DNA: 2, DA1:11")
+    } else {
+      console.log(msg,"Read D700~D719 from DNA: 2, DA1:11")
+    }
+  }}, `Read D700~D719 from DNA:2, DA1:11`);
+
+//example write 1010 1111 0000 0101 to D700.0~D700.15 - response will be sent to client 'reply' handler
+client.write('D700.0', [true, false, 1, 0,    "true", true, 1, "1",    "false", false, 0, "0",    0, 1, 0,  1], null, "write 1010 1111 0000 0101 to D700");
+client.read('D700.0',16, null, "read D700.0 ~ D700.15 - should contain 1010 1111 0000 0101");
+
 
 //example tagged data for sending with a status request
-var tag = {"source": "system-a", "sendto": "system-b"}; 
+const tag = {"source": "system-a", "sendto": "system-b"}; 
+getStatus(tag);
 
-client.status(function(err, seq) {
-  if(err) {
-    console.error(err);
-  } else {
-    //use the tag for post reply routing
-    console.log(seq.tag, seq.response);
-  }
-}, tag);
+
+function getStatus(_tag) {
+  console.log("Get PLC Status...")
+  client.status(function(err, msg) {
+    if(err) {
+      console.error(err, msg);
+    } else {
+      //use the tag for post reply routing or whatever you need
+      console.log(msg.response, msg.tag);
+    }
+  }, _tag);
+}
+
+
+setTimeout(() => {
+  console.log("Request PLC change to STOP mode...")
+  client.stop((err, msg) => {
+    if(err) {
+      console.error(err)
+    } else {
+      console.log("should be stopped")
+      setTimeout(() => {
+        getStatus();
+      }, 150);
+    }
+  })
+}, 500);
+
+
+setTimeout(() => {
+  console.log("Request PLC change to RUN mode...")
+  client.run((err, msg) => {
+    if(err) {
+      console.error(err)
+    } else {
+      console.log("should be running again")
+      setTimeout(() => {
+        getStatus();
+      }, 150);
+    }
+  })
+}, 2000);
 
