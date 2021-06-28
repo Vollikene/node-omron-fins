@@ -1,12 +1,16 @@
 node-omron-fins
 ===============
 ## Overview
-This is an implementation of the [OMRON FINS protocol](https://www.google.com/search?q=omron+fins+protocol+W342-E1-17) using Node.js. This library allows for rapid development of network based services that need to communicate with FINS capable devices. Utilizing the awesome asynchronous abilities of Node.js communication with large numbers of devices is very fast. UDP was chosen as the first variant of the protocol to be implemented because of its extremely low overhead and performance advantages. Although UDP is connectionless this library makes use of software based timeouts and transaction identifiers to allow for better reliability. 
+This is an implementation of the [OMRON FINS protocol](https://www.google.com/search?q=omron+fins+protocol+W342-E1-17) using Node.js. This library allows for rapid development of network based services that need to communicate with FINS capable devices. Utilizing the awesome asynchronous abilities of Node.js communication with large numbers of devices is very fast. 
 
-This adaption of the library utilises a sequence manager to coordinate callbacks with data responses, providing the ability to clearly understand who called for data when the request returns. All of the commands (listed below) can be called not only with a callback (for determining who called) but can also except a `tag` of any type (typically an object or key) permitting further routing in the users callback. If the callback is omitted, the appropriate reply/timeout/error is emitted instead.
+Both UDP and TCP are supported however UDP is preferred because of its low overhead and performance advantages. Although UDP is connectionless this library makes use of software based timeouts and transaction identifiers (SID) to ensure request and response are matched up allowing for better reliability. 
+
+This adaption of the library utilises a sequence manager to coordinate callbacks with data responses, providing the ability to clearly understand who called for data when the request returns. All of the commands (listed below) can be called not only with a `callback` (or an `options` object with `.callback`), they also except a `tag` of any type (typically an object or key) permitting further routing in the users callback. If the `options`/`callback` is omitted, the appropriate reply/timeout/error is emitted instead.
+
+When an `options` object is used in the command function, FINS routing and timeout can also be specified. See the **Memory Area Read Command** below for an example of using an options object and FINS routing.
 
 ## Version Update Notes
-This release (and possibly future releases up to V1.0.0) has breaking changes.
+This release (and possibly future releases up to V1.0.0) may have breaking changes.
 Where possible, I make every attempt to keep things compatible, but sometimes, it becomes obvious a better way is worth the trouble - it happens (sorry) :)
 Semantic Versioning 2.0.0 will be followed after V1 however for now, where you see `V0.x.y`...
 * `x` = major / minor change
@@ -32,6 +36,7 @@ NOTE: Not all NX PLCs have FINS support.
 * Controller status read
 * Run
 * Stop
+* CPU UNIT Data read
 
 
 ## Prerequisites
@@ -46,22 +51,22 @@ As an example we will be making a directory for our example code and installing 
 mkdir helloFins
 cd helloFins
 npm init
-npm install omron-fins
+npm install node-omron-fins
 ```
 
 ## Usage
 Requiring the library:
 ```js
-const fins = require('omron-fins');
+const fins = require('node-omron-fins');
 ```
 
 
 Create a `FinsClient` object and pass it:
 * `port` - FINS UDP port number as set on the PLC
 * `ip` - IP address of the PLC
-* `options` - An object containing necessary parameters `timeout`, `DNA`, `DA1`, `DA2`, `SNA`, `SA1`, `SA2` 
+* `options` - An object containing necessary parameters `protocol`, `timeout`, `DNA`, `DA1`, `DA2`, `SNA`, `SA1`, `SA2` 
 ```js
-const options = {timeout: 5000, SA1: 2, DA1: 1};
+const options = {timeout: 5000, SA1: 2, DA1: 1, protocol: "udp"}; //protocol can be "udp" or "tcp" only
 const IP = '192.168.0.2';
 const PORT = 9600;
 const client = fins.FinsClient(PORT, IP, options);
@@ -70,7 +75,7 @@ const client = fins.FinsClient(PORT, IP, options);
 Add a reply listener. The `msg` parameters content will vary depending on the command issued. 
 
 * `.sid` - Transaction identifier. Use this to track specific command/ response pairs.
-* `.request` - An object containing values like the parsed `address` object and a string `functionName` 
+* `.request` - An object containing values like the parsed `address` object and the command `command` 
 * `.response` - An object containing the parsed values from the FINS command including the `remotehost`, `endCode` and `endCodeDescription`.
 * `.error` - This will normally be `false`. `Check msg.response.*`  if `true`
 * `.complete` - true if the command has completed
@@ -84,7 +89,7 @@ Example...
 client.on('reply', msg){
 	console.log("Reply from           : ", msg.response.remoteHost);
 	console.log("Sequence ID (SID)    : ", msg.sid);
-	console.log("Operation requested  : ", msg.request.functionName);
+	console.log("Requested command    : ", msg.request.command);
 	console.log("Response code        : ", msg.response.endCode);
 	console.log("Response desc        : ", msg.response.endCodeDescription);
 	console.log("Data returned        : ", msg.response.values || "");
@@ -95,10 +100,7 @@ client.on('reply', msg){
 
 
 
-
 Finally, call any of the supported commands! 
-
-
 
 
 ### Memory Area Read Command
@@ -106,7 +108,7 @@ Finally, call any of the supported commands!
 
 * `address` - Memory area and the numerical start address e.g. `D100` or `CIO50.0`
 * `count` - Number of registers to read
-* `callback` - Optional callback `(err, msg) => {}` 
+* `options` - Optional options object or a callback `(err, msg) => {}` (If an options object is provided then a callback can be added to the options object as `options.callback`)
 * `tag` - Optional tag item that is sent back in the callback method 
 
 ```js
@@ -114,9 +116,22 @@ Finally, call any of the supported commands!
 .read('D00000',10);
 
 /* Same as above with callback */
-client.read('D00000',10,function(err,bytes) {
-	console.log("Bytes: ", bytes);
+client.read('D00000',10,function(err, msg) {
+	console.log("msg: ", msg);
 });
+
+/* Read D00000 from a remote PLC via the connected PLC (likely requires PLC routing table setup) */
+const opts = {
+	timeoutMS: 3000, //set an individual timeout for this transaction
+	DNA: 5, //remote network 5
+	DA1: 2,  //remote node 2
+	callback: function(err, msg) {
+		if(err) console.error(err);
+		console.log("msg: ", msg);
+	}
+}
+client.read('D00000',10, opts, myTag);
+
 ```
 
 ### Memory Area Write Command
@@ -124,7 +139,7 @@ client.read('D00000',10,function(err,bytes) {
 
 * `address` - Memory area and the numerical start address e.g. `D100` or `CIO50.0`
 * `data` - An array of values or single value
-* `callback` - Optional callback `(err, msg) => {}` 
+* `options` - Optional options object or a callback `(err, msg) => {}` (If an options object is provided then a callback can be added to the options object as `options.callback`)
 * `tag` - Optional tag item that is sent back in the callback method 
 
 ```js
@@ -156,7 +171,7 @@ client.read('D00000',10,function(err,bytes) {
 * `address` - Memory area and the numerical start address e.g. `D100` or `CIO50`
 * `value` - Value to be filled
 * `count` - Number of registers to write
-* `callback` - Optional callback `(err, msg) => {}` 
+* `options` - Optional options object or a callback `(err, msg) => {}` (If an options object is provided then a callback can be added to the options object as `options.callback`)
 * `tag` - Optional tag item that is sent back in the callback method 
 
 ```js
@@ -177,7 +192,7 @@ client.read('D00000',10,function(err,bytes) {
 `.readMultiple(addresses, callback, tag)`
 
 * `addresses` - Array or CSV of Memory addresses e.g. `"D10.15,CIO100,E0_100"` or `["CIO50.0", "D30", "W0.0"]`
-* `callback` - Optional callback `(err, msg) => {}` 
+* `options` - Optional options object or a callback `(err, msg) => {}` (If an options object is provided then a callback can be added to the options object as `options.callback`)
 * `tag` - Optional tag item that is sent back in the callback method 
 
 ```js
@@ -198,7 +213,7 @@ client.read('D00000',10,function(err,bytes) {
 * `srcAddress` - Source Memory address e.g. `D100` or `CIO50`
 * `dstAddress` - Destination Memory address e.g. `D200` or `CI100`
 * `count` - Number of registers to copy
-* `callback` - Optional callback `(err, msg) => {}` 
+* `options` - Optional options object or a callback `(err, msg) => {}` (If an options object is provided then a callback can be added to the options object as `options.callback`)
 * `tag` - Optional tag item that is sent back in the callback method 
 
 ```js
@@ -216,7 +231,7 @@ client.read('D00000',10,function(err,bytes) {
 ### Change PLC to MONITOR mode
 `.run(callback, tag)`
 
-* `callback` - Optional callback `(err, msg) => {}` 
+* `options` - Optional options object or a callback `(err, msg) => {}` (If an options object is provided then a callback can be added to the options object as `options.callback`)
 * `tag` - Optional tag item that is sent back in the callback method 
 
 ```js
@@ -228,7 +243,7 @@ client.read('D00000',10,function(err,bytes) {
 
 ### Change PLC to PROGRAM mode
 `.stop(callback, tag)`
-* `callback` - Optional callback `(err, msg) => {}` 
+* `options` - Optional options object or a callback `(err, msg) => {}` (If an options object is provided then a callback can be added to the options object as `options.callback`)
 * `tag` - Optional tag item that is sent back in the callback method 
 
 ```js
@@ -245,7 +260,7 @@ client.read('D00000',10,function(err,bytes) {
 ### Get PLC Status
 `.status(callback, tag)`
 
-* `callback` - Optional callback `(err, msg) => {}` 
+* `options` - Optional options object or a callback `(err, msg) => {}` (If an options object is provided then a callback can be added to the options object as `options.callback`)
 * `tag` - Optional tag item that is sent back in the callback method 
 
 ```js
@@ -256,149 +271,192 @@ client.read('D00000',10,function(err,bytes) {
 .status();
 ```
 
+### CPU UNIT DATA READ
+`.cpuUnitDataRead(callback, tag)`
+
+* `options` - Optional options object or a callback `(err, msg) => {}` (If an options object is provided then a callback can be added to the options object as `options.callback`)
+* `tag` - Optional tag item that is sent back in the callback method 
+
+```js
+.cpuUnitDataRead(function(err, msg) {
+  console.log(err, msg)
+}, tag);
+
+.cpuUnitDataRead();
+
+```
+
 ======
 
 ## Example applications
 
 ### Basic Example
-A basic example that will show you how to read, write and fill data for a single client.
+A basic example that will demonstrate most of the features for a single client connection.
 
 ```js
+/* eslint-disable no-unused-vars */
 const fins = require('../lib/index');  // << use this when running from src
-//const fins = require('omron-fins'); // << use this when running from npm
+//const fins = require('node-omron-fins'); // << use this when running from npm
 
 // Connecting to remote FINS client on port 9600 with timeout of 2s.
 // PLC is expected to be at 192.168.1.120 and this PC is expected to be fins node 36 (adjust as required)
-const client = fins.FinsClient(9600,'192.168.1.120', {SA1:36, DA1:120, timeout: 2000});
+//const client = fins.FinsClient(9700,'192.168.1.120', {protocol: "tcp", SA1:36, DA1:120, timeout: 2000});
+const client = fins.FinsClient(9600, '192.168.1.120', { protocol: "udp", SA1: 36, DA1: 120, timeout: 2000 });
 
 // Setting up our error listener
-client.on('error',function(error, msg) {
-  console.log("Error: ", error, msg);
+client.on('error', function (error, msg) {
+    console.log("Error: ", error, msg);
 });
 // Setting up our timeout listener
-client.on('timeout',function(host, msg) {
-  console.log("Timeout: ", host);
+client.on('timeout', function (host, msg) {
+    console.log("Timeout: ", host, msg);
 });
 
-// Setting up the general response listener showing a selection of properties from the `msg`
-client.on('reply',function(msg) {
-  console.log("############# client.on('reply'...) #################")
-	console.log("Reply from           : ", msg.response.remoteHost);
-	console.log("Sequence ID (SID)    : ", msg.sid);
-	console.log("Operation requested  : ", msg.request.functionName);
-	console.log("Response code        : ", msg.response.endCode);
-	console.log("Response desc        : ", msg.response.endCodeDescription);
-	console.log("Data returned        : ", msg.response.values || "");
-	console.log("Round trip time      : ", msg.timeTaken + "ms");
-	console.log("Your tag             : ", msg.tag);
-  console.log("#####################################################")
+client.on('open', function (info) {
+    console.log("open: ", info);
+
+    // Setting up the general response listener showing a selection of properties from the `msg`
+    client.on('reply', function (msg) {
+        console.log("");
+        console.log("############# client.on('reply'...) #################");
+        console.log("Reply from           : ", msg.response.remoteHost);
+        console.log("Sequence ID (SID)    : ", msg.sid);
+        console.log("Requested command    : ", msg.request.command);
+        console.log("Response code        : ", msg.response.endCode);
+        console.log("Response desc        : ", msg.response.endCodeDescription);
+        if (msg.request.command.name == 'cpu-unit-data-read') {
+            console.log("CPU model            : ", msg.response.CPUUnitModel || "");
+            console.log("CPU version          : ", msg.response.CPUUnitInternalSystemVersion || "");
+        } else {
+            console.log("Data returned        : ", msg.response.values || "");
+        }
+        console.log("Round trip time      : ", msg.timeTaken + "ms");
+        console.log("Your tag             : ", msg.tag);
+        console.log("#####################################################");
+        console.log("");
+    });
+
+    console.log("Read CPU Unit Data ")
+    client.cpuUnitDataRead(null, { "tagdata": "Calling cpuUnitDataRead" });
+
+
+    // Read 10 registers starting at DM register 0
+    // a "reply" will be emitted - check general client reply on reply handler
+    console.log("Read 10 WD from D0")
+    client.read('D0', 10, null, { "tagdata": "I asked for 10 registers from D0" });
+    console.log("Read 32 bits from D0.0")
+    client.read('D0.0', 32, null, { "tagdata": "I asked for 32 bits from D0.0" });
+
+
+    // Read multiple registers using CSV as the address list 
+    // a "reply" will be emitted - check general client reply on reply handler
+    console.log(`Read multiple addresses "D0,D0.0,D0.1,D0.2,D0.3,W10,D1.15"`)
+    client.readMultiple('D0,D0.0,D0.1,D0.2,D0.3,W10,D1.15', null, "readMultiple 'D0,D0.0,D0.1,D0.2,D0.3,W10,D1.15'");
+
+    // Read multiple registers using an array as the address list 
+    // a "reply" will be emitted - check general client reply on reply handler
+    console.log(`Read multiple addresses ["D0","D0.0","D0.1","D0.2","W10","D1.15"]`)
+    client.readMultiple(["D0", "D0.0", "D0.1", "D0.2", "W10", "D1.15"], null, 'readMultiple ["D0","D0.0","D0.1","D0.2","W10","D1.15"]');
+
+
+    // direct callback is useful for getting direct responses to direct requests
+    var cb = function (err, msg) {
+        console.log("");
+        console.log("################ DIRECT CALLBACK ####################");
+        if (err)
+            console.error(err);
+        else
+            console.log("SID: " + msg.request.sid, msg.request.command.name, msg.request.command.desc, msg.request.command.descExtra, msg.tag || "", msg.response.endCodeDescription);
+        console.log("#####################################################");
+        console.log("");
+    };
+
+
+    //example fill D700~D704 with randomInt. Callback `cb` with the response
+    let randomInt = parseInt(Math.random() * 1000) + 1;
+    console.log(`Fill D700~D709 with random number '${randomInt}' - direct callback expected`)
+    client.fill('D700', randomInt, 10, cb, `set D700~D709 to '${randomInt}'`);
+
+    //example Transfer D700~D709 to D710~D719. Callback `cb` with the response
+    console.log("Transfer D700~D709 to D710~D719 - direct callback expected");
+    client.transfer('D700', 'D710', 10, cb, "Transfer D700~D709 to D710~D719");
+
+    //example Read D700~D719 
+    console.log(`Read D700~D719 - expect ${randomInt}`)
+    client.read('D700', 20, null, `Read D700~D719 - expect all values to be '${randomInt}'`)
+
+    //example Read from other PLC on FINS network (routed to NET:2, NODE:11) D700~D719 
+    console.log(`Read D700~D719 from DNA:2, DA1:11 with individual timeout setting`)
+    const readRemotePLC_options = {
+        timeoutMS: 400, 
+        DNA: 2, 
+        DA1: 11, 
+        callback: function (err, msg) {
+            if (err) {
+                console.error(err, msg, "Read D700~D719 from DNA: 2, DA1:11")
+            } else {
+                console.log(msg, "Read D700~D719 from DNA: 2, DA1:11")
+            }
+        }
+    }
+    client.read('D700', 20, readRemotePLC_options, `Read D700~D719 from DNA:2, DA1:11`);
+
+    //example write 1010 1111 0000 0101 to D700.0~D700.15 - response will be sent to client 'reply' handler
+    client.write('D700.0', [true, false, 1, 0, "true", true, 1, "1", "false", false, 0, "0", 0, 1, 0, 1], null, "write 1010 1111 0000 0101 to D700");
+    client.read('D700.0', 16, null, "read D700.0 ~ D700.15 - should contain 1010 1111 0000 0101");
+
+
+    //example tagged data for sending with a status request
+    const tag = { "source": "system-a", "sendto": "system-b" };
+    getStatus(tag);
+
+    function getStatus(_tag) {
+        console.log("Get PLC Status...")
+        client.status(function (err, msg) {
+            if (err) {
+                console.error(err, msg);
+            } else {
+                //use the tag for post reply routing or whatever you need
+                console.log("");
+                console.log("################ STATUS CALLBACK ####################");
+                console.log(msg.response.status, msg.response.mode, msg.response);
+                console.log("#####################################################");
+                console.log("");
+            }
+        }, _tag);
+    }
+
+
+    setTimeout(() => {
+        console.log("Request PLC change to STOP mode...")
+        client.stop((err, msg) => {
+            if (err) {
+                console.error(err)
+            } else {
+                console.log("* PLC should be stopped - check next STATUS CALLBACK")
+                setTimeout(() => {
+                    getStatus();
+                }, 150);
+            }
+        })
+    }, 500);
+
+
+    setTimeout(() => {
+        console.log("Request PLC change to RUN mode...")
+        client.run((err, msg) => {
+            if (err) {
+                console.error(err)
+            } else {
+                console.log("* PLC should be running - check next STATUS CALLBACK")
+                setTimeout(() => {
+                    getStatus();
+                }, 150);
+            }
+        })
+    }, 2000);
+
 });
-
-// Read 10 registers starting at DM register 0
-// a "reply" will be emitted - check general client reply on reply handler
-console.log("Read 10 WD from D0")
-client.read('D0',10, null, {"tagdata":"I asked for 10 registers from D0"});
-console.log("Read 32 bits from D0.0")
-client.read('D0.0',32, null, {"tagdata":"I asked for 32 bits from D0.0"}); 
-
-
-
-// Read multiple registers using CSV as the address list 
-// a "reply" will be emitted - check general client reply on reply handler
-console.log(`Read multiple addresses "D0,D0.0,D0.1,D0.2,D0.3,W10,D1.15"`)
-client.readMultiple('D0,D0.0,D0.1,D0.2,D0.3,W10,D1.15', null, "readMultiple 'D0,D0.0,D0.1,D0.2,D0.3,W10,D1.15'"); 
-
-// Read multiple registers using an array as the address list 
-// a "reply" will be emitted - check general client reply on reply handler
-console.log(`Read multiple addresses ["D0","D0.0","D0.1","D0.2","W10","D1.15"]`)
-client.readMultiple(["D0","D0.0","D0.1","D0.2","W10","D1.15"], null, 'readMultiple ["D0","D0.0","D0.1","D0.2","W10","D1.15"]'); 
-
-
-// direct callback is useful for getting direct responses to direct requests
-var cb = function(err, msg) {
-  console.log("################ DIRECT CALLBACK ####################")
-  if(err)
-    console.error(err);
-  else
-	  console.log(msg.request.functionName, msg.tag || "", msg.response.endCodeDescription);
-	console.log("#####################################################")
-};
-
-
-//example fill D700~D704 with randomInt. Callback `cb` with the response
-let randomInt = parseInt(Math.random() * 1000) + 1;
-console.log(`Fill D700~D709 with random number '${randomInt}' - direct callback expected`)
-client.fill('D700',randomInt, 10, cb, `set D700~D709 to '${randomInt}'`);
-
-//example Transfer D700~D709 to D710~D719. Callback `cb` with the response
-console.log("Transfer D700~D709 to D710~D719 - direct callback expected");
-client.transfer('D700','D710', 10, cb, "Transfer D700~D709 to D710~D719");
-
-//example Read D700~D719 
-console.log(`Read D700~D719 - expect ${randomInt}`)
-client.read('D700',20, null, `Read D700~D719 - expect all values to be '${randomInt}'`)
-
-//example Read from other PLC on FINS network (routed to NET:2, NODE:11) D700~D719 
-console.log(`Read D700~D719 from DNA:2, DA1:11`)
-client.read('D700',20, {timeoutMS:4000, DNA:2, DA1:11, callback: function(err,msg) {
-    if(err) {
-      console.error(err, msg, "Read D700~D719 from DNA: 2, DA1:11")
-    } else {
-      console.log(msg,"Read D700~D719 from DNA: 2, DA1:11");
-    }
-  }}, `Read D700~D719 from DNA:2, DA1:11`)
-
-//example write 1010 1111 0000 0101 to D700.0~D700.15 - response will be sent to client 'reply' handler
-client.write('D700.0', [true, false, 1, 0,    "true", true, 1, "1",    "false", false, 0, "0",    0, 1, 0,  1], null, "write 1010 1111 0000 0101 to D700");
-client.read('D700.0',16, null, "read D700.0 ~ D700.15 - should contain 1010 1111 0000 0101");
-
-
-//example tagged data for sending with a status request
-const tag = {"source": "system-a", "sendto": "system-b"}; 
-getStatus(tag);
-
-
-function getStatus(_tag) {
-  console.log("Get PLC Status...")
-  client.status(function(err, msg) {
-    if(err) {
-      console.error(err, msg);
-    } else {
-      //use the tag for post reply routing or whatever you need
-      console.log(msg.response, msg.tag);
-    }
-  }, _tag);
-}
-
-
-setTimeout(() => {
-  console.log("Request PLC change to STOP mode...")
-  client.stop((err, msg) => {
-    if(err) {
-      console.error(err)
-    } else {
-      console.log("should be stopped")
-      setTimeout(() => {
-        getStatus();
-      }, 150);
-    }
-  })
-}, 500);
-
-
-setTimeout(() => {
-  console.log("Request PLC change to RUN mode...")
-  client.run((err, msg) => {
-    if(err) {
-      console.error(err)
-    } else {
-      console.log("should be running again")
-      setTimeout(() => {
-        getStatus();
-      }, 150);
-    }
-  })
-}, 2000);
 ```
 
 
@@ -416,7 +474,7 @@ Once the size of the responses array is equal to the number of units we tried to
 ```js
 /* ***************** UNTESTED ***************** */
 
-const fins = require('omron-fins');
+const fins = require('node-omron-fins');
 const debug = true;
 const clients = [];
 const responses = {};
@@ -465,7 +523,7 @@ const pollUnits = function() {
 		});
 
 		clients[remHost.KEY].on('error',function(err, msg) {
-			//depending where the error occurred, seq may contain relevant info
+			//depending where the error occurred, msg also may contain relevant info
 			console.error(err)
 		});
 

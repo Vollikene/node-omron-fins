@@ -1,30 +1,37 @@
 {
-  "name": "omron-fins",
-  "description": "Node.js implementation of the Omron FINS protocol",
-  "version": "0.5.0-beta.0",
-  "main": "lib/index.js",
-  "author": {
-    "name": "Steve-Mcl",
-    "email": "44235289+Steve-Mcl@users.noreply.github.com"
-  },
-  "contributors": [{
-    "name": "Patrick Servello",
-    "email": "patrick.servello@gmail.com"
-  }],
-  "engines" : { "node" : ">=6.0.0" },
-  "keywords": [
-    "OMRON",
-    "FINS",
-    "PLC",
-    "Automation",
-    "Industrial"
-  ],
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Steve-Mcl/node-omron-fins.git"
-  },
-  "dependencies": {},
-  "readme": "node-omron-fins\n===============\n\nAn implementation of the Omron FINS library for node js\n",
-  "readmeFilename": "README.md"
+    "name": "omron-fins",
+    "description": "Node.js implementation of the Omron FINS protocol",
+    "version": "0.6.0-beta.0",
+    "main": "lib/index.js",
+    "author": {
+        "name": "Steve-Mcl",
+        "email": "44235289+Steve-Mcl@users.noreply.github.com"
+    },
+    "contributors": [
+        {
+            "name": "Patrick Servello",
+            "email": "patrick.servello@gmail.com"
+        }
+    ],
+    "engines": {
+        "node": ">=6.0.0"
+    },
+    "keywords": [
+        "OMRON",
+        "FINS",
+        "PLC",
+        "Automation",
+        "Industrial"
+    ],
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Steve-Mcl/node-omron-fins.git"
+    },
+    "dependencies": {},
+    "readme": "node-omron-fins\n===============\n\nAn implementation of the Omron FINS library for node js\n",
+    "readmeFilename": "README.md",
+    "devDependencies": {
+        "eslint": "^7.29.0"
+    }
 }
