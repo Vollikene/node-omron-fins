@@ -51,13 +51,13 @@ As an example we will be making a directory for our example code and installing 
 mkdir helloFins
 cd helloFins
 npm init
-npm install node-omron-fins
+npm install omron-fins
 ```
 
 ## Usage
 Requiring the library:
 ```js
-const fins = require('node-omron-fins');
+const fins = require('omron-fins');
 ```
 
 
@@ -296,7 +296,7 @@ A basic example that will demonstrate most of the features for a single client c
 ```js
 /* eslint-disable no-unused-vars */
 const fins = require('../lib/index');  // << use this when running from src
-//const fins = require('node-omron-fins'); // << use this when running from npm
+//const fins = require('omron-fins'); // << use this when running from npm
 
 // Connecting to remote FINS client on port 9600 with timeout of 2s.
 // PLC is expected to be at 192.168.1.120 and this PC is expected to be fins node 36 (adjust as required)
@@ -474,7 +474,7 @@ Once the size of the responses array is equal to the number of units we tried to
 ```js
 /* ***************** UNTESTED ***************** */
 
-const fins = require('node-omron-fins');
+const fins = require('omron-fins');
 const debug = true;
 const clients = [];
 const responses = {};
