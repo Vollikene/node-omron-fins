@@ -37,6 +37,8 @@ NOTE: Not all NX PLCs have FINS support.
 * Run
 * Stop
 * CPU UNIT Data read
+* CLOCK READ
+* CLOCK WRITE
 
 
 ## Prerequisites
@@ -283,6 +285,46 @@ client.read('D00000',10, opts, myTag);
 }, tag);
 
 .cpuUnitDataRead();
+
+```
+
+### CLOCK READ
+`.clockRead(callback, tag)`
+
+* `options` - Optional options object or a callback `(err, msg) => {}` (If an options object is provided then a callback can be added to the options object as `options.callback`)
+* `tag` - Optional tag item that is sent back in the callback method 
+
+```js
+.clockRead(function(err, msg) {
+  console.log(err, msg)
+}, tag);
+
+.clockRead();
+
+```
+
+### CLOCK WRITE
+`.clockWrite(clock, callback, tag)`
+
+* `clock` - An object containing `{year,month,day,hour,minute,second,day_of_week}` (second & day_of_week are optional) 
+* `options` - Optional options object or a callback `(err, msg) => {}` (If an options object is provided then a callback can be added to the options object as `options.callback`)
+* `tag` - Optional tag item that is sent back in the callback method 
+
+```js
+const clock = {
+    year: 2021,
+    month: 12,
+    day: 25,
+    hour: 13,
+    minute: 0,
+    //second: 30, //optional
+    // day_of_week: 2, //optional
+}
+.clockWrite(clock, function(err, msg) {
+  console.log(err, msg)
+}, tag);
+
+.clockWrite(clock);
 
 ```
 
