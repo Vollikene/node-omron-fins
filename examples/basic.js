@@ -124,7 +124,7 @@ client.on('open', function (info) {
                 //use the tag for post reply routing or whatever you need
                 console.log("");
                 console.log("################ STATUS CALLBACK ####################");
-                console.log(msg.response.status, msg.response.mode, msg.response);
+                console.log(msg.response.result);
                 console.log("#####################################################");
                 console.log("");
             }
