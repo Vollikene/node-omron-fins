@@ -66,7 +66,7 @@ const fins = require('omron-fins');
 Create a `FinsClient` object and pass it:
 * `port` - FINS UDP port number as set on the PLC
 * `ip` - IP address of the PLC
-* `options` - An object containing necessary parameters `protocol`, `timeout`, `DNA`, `DA1`, `DA2`, `SNA`, `SA1`, `SA2` 
+* `options` - An object containing necessary parameters `protocol`, `timeout`, `DNA`, `DA1`, `DA2`, `SNA`, `SA1`, `SA2`, `autoConnect`
 ```js
 const options = {timeout: 5000, SA1: 2, DA1: 1, protocol: "udp"}; //protocol can be "udp" or "tcp" only
 const IP = '192.168.0.2';
@@ -124,7 +124,7 @@ client.read('D00000',10,function(err, msg) {
 
 /* Read D00000 from a remote PLC via the connected PLC (likely requires PLC routing table setup) */
 const opts = {
-	timeoutMS: 3000, //set an individual timeout for this transaction
+	timeout: 3000, //set an individual timeout for this transaction
 	DNA: 5, //remote network 5
 	DA1: 2,  //remote node 2
 	callback: function(err, msg) {
@@ -430,7 +430,7 @@ client.on('open', function (info) {
     //example Read from other PLC on FINS network (routed to NET:2, NODE:11) D700~D719 
     console.log(`Read D700~D719 from DNA:2, DA1:11 with individual timeout setting`)
     const readRemotePLC_options = {
-        timeoutMS: 400, 
+        timeout: 400, 
         DNA: 2, 
         DA1: 11, 
         callback: function (err, msg) {

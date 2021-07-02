@@ -93,7 +93,7 @@ client.on('open', function (info) {
     //example Read from other PLC on FINS network (routed to NET:2, NODE:11) D700~D719 
     console.log(`Read D700~D719 from DNA:2, DA1:11 with individual timeout setting`)
     const readRemotePLC_options = {
-        timeoutMS: 400, 
+        timeout: 400, 
         DNA: 2, 
         DA1: 11, 
         callback: function (err, msg) {
