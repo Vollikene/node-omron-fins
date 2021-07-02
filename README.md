@@ -67,12 +67,26 @@ Create a `FinsClient` object and pass it:
 * `port` - FINS UDP port number as set on the PLC
 * `ip` - IP address of the PLC
 * `options` - An object containing necessary parameters `protocol`, `timeout`, `DNA`, `DA1`, `DA2`, `SNA`, `SA1`, `SA2`, `autoConnect`
+NOTE: if `autoConnect` is `false`, the connection will not be made at the time of creation. Instead you can call `connect` (with override options is desired). This permits an application to instantiate a FinsClient then later connect to PLC1 with `tcp` protocol, disconnect, then change the connection to PLC2 with `udp` protocol 
 ```js
 const options = {timeout: 5000, SA1: 2, DA1: 1, protocol: "udp"}; //protocol can be "udp" or "tcp" only
 const IP = '192.168.0.2';
 const PORT = 9600;
 const client = fins.FinsClient(PORT, IP, options);
+
+
+// Connecting / disconnecting...
+
+client.connect(); //connect to PLC with options set when the `FinsClient` was created
+
+client.disconnect(); 
+
+client.connect({"host": "plc_2", "port": 9700, "protocol": "tcp", "timeout": 3000, "DA1": 2}); //connect to different PLC with new options
+
+//NOTE: Calling client.disconnect(); then client.connect(); will simply reconnect using the same connection options last used.
+
 ```
+
 
 Add a reply listener. The `msg` parameters content will vary depending on the command issued. 
 
